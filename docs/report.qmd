@@ -25,7 +25,7 @@ from statsmodels.tsa.holtwinters import SimpleExpSmoothing
 ##################
 # Model parameters
 ##################
-LEADTIME = datetime.timedelta(31)
+LEADTIME = datetime.timedelta(180)
 PARK_CODE = "JOTR"
 PARK_NAME = "Joshua Tree National Park"
 
@@ -251,7 +251,7 @@ fig.show()
 And now we fit the model. The two smoothing parameters were chosen based off of experimenting to see which yielded the best results.
 ```{python}
 # | label: fig-model
-# | fig-cap: "Visitation vs 31 day lead time forecast"
+# | fig-cap: "Actual Visitation vs Forecast"
 
 ######################
 # Prep for forecasting
@@ -415,7 +415,7 @@ px.line(
     x="date",
     y="value",
     color="variable",
-    title="Actual Visits to Joshua Tree NP and 31 Day Lead-time Forecast",
+    title=f"Actual Visits to Joshua Tree NP and {LEADTIME.days} Day Lead-time Forecast",
     template="plotly_white",
 )
 
@@ -445,8 +445,18 @@ def mse(actual: pd.Series, forecast: pd.Series) -> float:
 
     return pow(actual - forecast, 2).mean()
 
+def rsquared(actual: pd.Series, forecast: pd.Series) -> float:
+    """
+    R squared
+    """
+    ss_res = pow(actual - forecast, 2).sum()
+    ss_tot = pow(actual - actual.mean(), 2).sum()
+
+    return 1 - ss_res / ss_tot
+
 print(f"MAPE= {mape(model_df['visits'], model_df['vhat']):.2f}")
 print(f"MSE= {mse(model_df['visits'], model_df['vhat']):.2f}")
+print(f"R^2= {rsquared(model_df['visits'], model_df['vhat']):.2f}")
 ```
 
 ## Comparison to Other Models
