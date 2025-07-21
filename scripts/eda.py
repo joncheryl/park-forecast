@@ -16,9 +16,9 @@ from statsmodels.tsa.holtwinters import SimpleExpSmoothing
 ########################
 # Import visitation data
 ########################
-LEADTIME = datetime.timedelta(31)
-PICKUP_SMOOTHING = .94 # .94 was great when tsa function didn't have +1
-RES_SMOOTHING = .4 # .96
+LEADTIME = datetime.timedelta(181)
+PICKUP_SMOOTHING = 0.8  # .94 was great when tsa function didn't have +1
+RES_SMOOTHING = 0.6  # .96
 PARK_CODE = "JOTR"
 PARK_NAME = "Joshua Tree National Park"
 # PARK_CODE = "GRSM"
@@ -43,8 +43,7 @@ visits_jt = visits.loc[visits["park_code"] == PARK_CODE].set_index("date")["visi
 #########################
 conn = sqlite3.connect("../data/reservations/reservations.db")
 
-SQL_QUERY = (
-    """
+SQL_QUERY = """
       SELECT parentlocation, park, facilityid, startdate, enddate, orderdate,
         numberofpeople
       FROM reservations
@@ -53,7 +52,6 @@ SQL_QUERY = (
       AND startdate NOT LIKE '0%'
       AND enddate NOT LIKE '0%';
     """
-)
 df = pd.read_sql_query(SQL_QUERY, conn, params=(PARK_NAME,))
 conn.close()
 
@@ -77,10 +75,30 @@ df = df.loc[~(df["startdate"] > df["enddate"])]
 # Cast facilityid as category
 df = df.astype({"facilityid": "category"})
 
+# visits by year
+df_jt = visits.loc[
+    (visits["park_code"] == PARK_CODE)
+    & (visits["date"].dt.year > 2006)
+    & (visits["date"].dt.year < 2024)
+]
+
 # %%
-#######################################
-# Plot visits and reservations together
-#######################################
+month_order = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+]
+df["monthyear"] = df["startdate"].dt.to_period("M").dt.to_timestamp()
+start_res = df.groupby("monthyear")["numberofpeople"].sum().reset_index()
 
 # visits by year
 df_jt = visits.loc[
@@ -88,6 +106,52 @@ df_jt = visits.loc[
     & (visits["date"].dt.year > 2006)
     & (visits["date"].dt.year < 2024)
 ]
+visits_monthly = (
+    df_jt.groupby(df_jt["date"].dt.strftime("%b"), observed=True)["visits"]
+    .sum()
+    .reindex(month_order)
+)
+
+
+fig = go.Figure()
+
+start_years = start_res["monthyear"].dt.year.unique()
+for year in start_years:
+    year_data = start_res[start_res["monthyear"].dt.year == year]
+    fig.add_trace(
+        go.Scatter(
+            x=year_data["monthyear"].dt.strftime("%b"),
+            y=year_data["numberofpeople"],
+            name=str(year),
+            mode="lines",
+        )
+    )
+
+fig.add_trace(
+    go.Scatter(
+        x=visits_monthly.index,
+        y=visits_monthly,
+        name="Visits",
+        yaxis="y2",
+        mode="lines+markers",
+    )
+)
+
+# Optional layout tweaks
+fig.update_layout(
+    title="Joshua Tree National Park Average Visitors and Reservations by Month",
+    yaxis=dict(
+        title="Reservations",
+        showgrid=False,
+    ),
+    yaxis2=dict(
+        title="Visits", overlaying="y", side="right", rangemode="tozero", showgrid=False
+    ),
+    barmode="stack",
+    template="plotly_white",
+)
+
+fig.show()
 
 # %%
 ######################
@@ -127,6 +191,7 @@ full_index = pd.date_range(
     start=f"{min_year}-01-01", end=f"{max_year}-12-01", freq="MS"
 )
 res_matrix = res_matrix.reindex(full_index, fill_value=0)
+
 
 ###############
 # Pickup matrix
@@ -214,7 +279,7 @@ def pickup_est(monthyear: datetime.datetime, leadtime: datetime.timedelta) -> fl
         model = SimpleExpSmoothing(yearly_pickups).fit(
             smoothing_level=PICKUP_SMOOTHING, optimized=False
         )
-        pickup_return =  model.forecast(1).iloc[0]
+        pickup_return = model.forecast(1).iloc[0]
 
     # Arbitrary noise reduction.
     if pickup_return > 1000:
@@ -233,7 +298,7 @@ def tsa_res_count(y: int, month_of_year: int) -> float:
             datetime.datetime(year, month_of_year, 1): res_matrix[
                 datetime.datetime(year, month_of_year, 1)
             ]
-            for year in range(min_year, y + 1) # works better with + 0 though. IDK
+            for year in range(min_year, y + 1)  # works better with + 0 though. IDK
         }
     )
 
@@ -253,11 +318,28 @@ def tsa_res_count(y: int, month_of_year: int) -> float:
     model = SimpleExpSmoothing(res_trend).fit(
         smoothing_level=RES_SMOOTHING, optimized=False
     )
-    return model.forecast(1).iloc[0]
+    res_forecast = model.forecast(1).iloc[0]
+
+    # # Arbitrary noise reduction.
+    # if res_forecast < res_matrix.max() * 0.01:
+    #     # If the forecast is less than 1% of the max, then return nan
+    #     return np.nan
+
+    return res_forecast
 
 
 # %%
-visits_df = visits_jt.loc[(pd.to_datetime(visits_jt.index).year >= 2008)].reset_index()
+# Create mask for year >= 2008
+mask_year = visits_jt.index.year >= 2008
+# # Create mask to exclude April 2020 through August 2020
+# mask_exclude_covid = ~(
+#     (visits_jt.index >= "2020-03-01") & (visits_jt.index <= "2021-08-31")
+# )
+# # Combine masks
+# final_mask = mask_year & mask_exclude_covid
+
+# visits_df = visits_jt.loc[final_mask].reset_index()
+visits_df = visits_jt.loc[mask_year].reset_index()
 visits_df["vhat"] = visits_df["date"].apply(lambda date: v_forecast(date, LEADTIME))
 
 visits_df = visits_df.melt(id_vars="date", value_vars=["visits", "vhat"])
@@ -273,9 +355,7 @@ res_diag = visits_jt.loc[(pd.to_datetime(visits_jt.index).year >= 2006)].reset_i
 res_diag["tsa_res"] = res_diag["date"].apply(
     lambda date: tsa_res_count(date.year, date.month)
 )
-res_diag["pickup_est"] = res_diag["date"].apply(
-    lambda date: pickup_est(date, LEADTIME)
-)
+res_diag["pickup_est"] = res_diag["date"].apply(lambda date: pickup_est(date, LEADTIME))
 px.line(res_diag.sort_values("date"), x="date", y="tsa_res").show()
 px.line(res_matrix).show()
 px.line(res_diag.sort_values("date"), x="date", y="pickup_est").show()
@@ -335,7 +415,7 @@ for date in visits_jt.index:
     subset = visits_jt.loc[mask].dropna()
 
     if len(subset) >= 12:
-        lag_order = ar_select_order(subset, maxlag=5, ic='aic')
+        lag_order = ar_select_order(subset, maxlag=5, ic="aic")
         model = AutoReg(subset, lags=lag_order.ar_lags, old_names=False)
         result = model.fit()
         predictions.loc[date] = result.forecast(1).iloc[0]
