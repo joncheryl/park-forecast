@@ -4,7 +4,6 @@ toc: true
 toc-location: left
 format:
   html:
-    embed-resources: true
     code-fold: true
     code-tools: true
 jupyter: python3
