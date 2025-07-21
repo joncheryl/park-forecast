@@ -4,6 +4,7 @@ toc: true
 toc-location: left
 format:
   html:
+    embed-resources: true
     code-fold: true
     code-tools: true
 jupyter: python3
@@ -550,7 +551,7 @@ To be continued...
 Each reservation is associated to facility with each park unit. I initially thought it would be useful to weight reservations at new facilities less heavily but the results did not seem improved. However, it's possible that this was an oversight as the pickup model was not fully developed at the time.
 
 ### More advanced forecasting models for pickup and reservation trends.
-Currently using a simple exponential smoothing model for both. Could try a Holt-Winters model see [here](https://otexts.com/fpp2/holt.html) or others that allow for trends. Could also try Holt-Winters that includes a seasonality component.
+Currently using a simple exponential smoothing model for both. Could try a Holt-Winters model (see [here](https://otexts.com/fpp2/holt.html)) or others that allow for trends. Could also try Holt-Winters that includes a seasonality component.
 
 ### Pickup method vs (S)ARIMA(X) model
 Could try forecasting with an ARIMA model, using reservations as an exogenous variable and taking into account the obvious seasonality. The current autoregressive model actually has a lead time of 1 year which puts it at quite a disadvantage to the pickup model. This lead time could be reduced by expanding an AR model to a more complex SARIMA model.
