@@ -34,14 +34,14 @@ PARK_NAME = "Joshua Tree National Park"
 # Import visitation data
 ########################
 visits = pd.read_csv(
-    "data/nps_visits.csv").astype({"date": "datetime64[s]"})
+    "../data/nps_visits.csv").astype({"date": "datetime64[s]"})
 visits_jt = visits.loc[visits["park_code"] == PARK_CODE].set_index("date")[
     "visits"]
 
 #########################
 # Import reservation data
 #########################
-conn = sqlite3.connect("data/reservations/reservations.db")
+conn = sqlite3.connect("../data/reservations/reservations.db")
 
 SQL_QUERY = (
     """
